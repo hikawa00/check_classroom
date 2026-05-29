@@ -68,7 +68,9 @@ def get_current_school_time():
 
 def get_current_period_index():
     """实时计算现在几点几分，命中第几节课"""
-    now_str = datetime.datetime.now().strftime("%H:%M")
+    utc_now = datetime.datetime.now(datetime.timezone.utc)
+    beijing_time = utc_now.replace(tzinfo=None) + datetime.timedelta(hours=8)
+    now_str = beijing_time.strftime("%H:%M")
     for period, (start, end) in PERIOD_TIMING.items():
         if start <= now_str <= end:
             return period
@@ -109,7 +111,11 @@ def find_empty_rooms_multi_periods(target_week, target_weekday, selected_periods
 st.title("🏫 北邮(BUPT) 智能空教室查询系统")
 
 # 头部加入实时时间锚点状态栏
-now_time_display = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+# 1. 官方推荐：先获取带 UTC 时区的当前时间
+utc_now = datetime.datetime.now(datetime.timezone.utc)
+# 2. 加上 8 小时变成北京时间，并去掉时区标签方便格式化
+beijing_time = utc_now.replace(tzinfo=None) + datetime.timedelta(hours=8)
+now_time_display = beijing_time.strftime("%Y-%m-%d %H:%M:%S")
 st.caption(f"🕒 服务器当前实时时间：{now_time_display} | 推荐课表：第 {auto_week} 周 星期{['一','二','三','四','五','六','日'][auto_weekday-1]}")
 st.markdown("---")
 
