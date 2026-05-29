@@ -6,7 +6,7 @@ import datetime
 st.set_page_config(page_title="BUPT空教室", page_icon="🏫", layout="wide")
 
 # ================= 1. 初始化会话状态 (Session State) =================
-# 用来记住全选按钮的状态，实现“全选/全清”切换
+# 用来记住全选按钮的状态，实现"全选/全清"切换
 if "all_selected" not in st.session_state:
     st.session_state.all_selected = False
 
@@ -122,11 +122,21 @@ with layout_left:
 # ================= ⏱️ 核心时间面板区域 =================
 st.markdown("### ⏱️ 选择上课时间段")
 
-# 1. 确定“当前节次及以后”的范围
-start_from_period = current_live_period if current_live_period else 1
+# 1. 确定"当前节次及以后"的范围
+# 注意：中午没有当前课节，此时current_live_period为None
+#   - 如果当前在午休（12:15-13:00），应该从下午第6节开始选
+#   - 否则从头开始选
+now_str = get_bj_now().strftime("%H:%M")
+if current_live_period is None:
+    if "12:15" <= now_str < "13:00":
+        start_from_period = 6
+    else:
+        start_from_period = 1
+else:
+    start_from_period = current_live_period
 all_future_periods = list(range(start_from_period, 15))
 
-# 2. 真正的“全选/取消全选”按钮交互（强行同步前端开关的 Value）
+# 2. 真正的"全选/取消全选"按钮交互（强行同步前端开关的 Value）
 btn_label = "❌ 取消全选" if st.session_state.all_selected else "📅 全选当前及后续节次"
 if st.button(btn_label):
     st.session_state.all_selected = not st.session_state.all_selected
@@ -134,7 +144,7 @@ if st.button(btn_label):
     # 暴力同步：直接修改 Streamlit 内部管辖组件状态的 session_state
     for p in range(1, 15):
         if st.session_state.all_selected:
-            # 如果是全选，只把“当前及以后”的开关置为 True，过去的置为 False
+            # 如果是全选，只把"当前及以后"的开关置为 True，过去的置为 False
             st.session_state[f"period_{p}"] = (p in all_future_periods)
         else:
             # 如果是取消全选，恢复默认：只把当前这一节置为 True
@@ -144,21 +154,24 @@ if st.button(btn_label):
 
 st.write("点击下方方块选择一节或多节课（支持跨节多选）。带有 🔥 标识的为**当前实时进行中**的节次：")
 
-# 3. 渲染 14 个平铺开关
+# 3. 渲染 14 个平铺开关（移动端列数动态调整，保证顺序正确）
 selected_periods = []
-grid_cols = st.columns(5)
+user_agent = str(st.context.headers.get("User-Agent", ""))
+is_mobile = "Mobi" in user_agent or "Android" in user_agent
+cols_count = 2 if is_mobile else 5
+grid_cols = st.columns(cols_count)
 
 for p in range(1, 15):
     start_t, end_t = PERIOD_TIMING[p]
     is_current = (p == current_live_period)
     label_prefix = "🔥 " if is_current else ""
     button_text = f"{label_prefix}第 {p:02d} 节\n({start_t} ~ {end_t})"
-    
+
     # 初始化兜底状态（仅在应用第一次打开、session_state 里还没这个开关时生效）
     if f"period_{p}" not in st.session_state:
         st.session_state[f"period_{p}"] = (p == current_live_period if current_live_period else p in [1, 2])
-        
-    with grid_cols[(p-1) % 5]:
+
+    with grid_cols[(p-1) % cols_count]:
         # 注意：这里去掉了 value= 属性，改用完全由 key 绑定的 session_state 接管
         if st.toggle(button_text, key=f"period_{p}"):
             selected_periods.append(p)
