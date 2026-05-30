@@ -21,23 +21,33 @@ all_classrooms = sorted(list(set(item["classroom"] for item in timetable)))
 
 CAMPUS_DATA = {
     "西土城本部": {
-        "教二": ["2-"],        
-        "教三": ["3-"],        
-        "教四": ["4-"],        
-        "未来学习大楼": ["未来学习", "未来", "WL"] 
+        "教二": ["2-"],
+        "教三": ["3-"],
+        "教四": ["4-"],
+        "主楼": ["未来学习大楼"]
     },
     "沙河校区": {
-        "教学实验综合楼N": ["综合楼-N", "实验楼-N"],  
-        "教学实验综合楼S": ["综合楼-S", "实验楼-S"],  
-        "智慧教学楼（S1）": ["智慧", "S1"]
+        "教学实验综合楼N": ["综合楼-N", "教学实验综合楼-N"],
+        "教学实验综合楼S": ["综合楼-S", "教学实验综合楼-S"],
+        "智慧教学楼（S1）": ["智慧教学楼", "智慧"]
     }
 }
 
 def get_classroom_location(room_name):
+    # 精确匹配：优先匹配不含分隔符的完整楼名
     for campus, buildings in CAMPUS_DATA.items():
         for b_name, keywords in buildings.items():
-            if any(kw in room_name for kw in keywords):
-                return campus, b_name
+            for kw in keywords:
+                if kw in ["未来学习大楼", "智慧教学楼", "教学实验综合楼-N", "教学实验综合楼-S"]:
+                    if kw in room_name:
+                        return campus, b_name
+    # 再用前缀匹配（教二、教三、教四、综合楼N/S、智慧）
+    for campus, buildings in CAMPUS_DATA.items():
+        for b_name, keywords in buildings.items():
+            for kw in keywords:
+                if kw not in ["未来学习大楼", "智慧教学楼", "教学实验综合楼-N", "教学实验综合楼-S"]:
+                    if room_name.startswith(kw):
+                        return campus, b_name
     return "其他", "其他"
 
 # ================= 3. 完美北京时间计算 (最新标准) =================
@@ -71,6 +81,15 @@ def get_current_period_index():
         if start <= now_str <= end:
             return period
     return None
+
+def get_next_period_index():
+    """获取当前时间所在的"下一节课"的节次索引（用于课间等时间空档期）"""
+    now_str = get_bj_now().strftime("%H:%M")
+    for period in range(1, 15):
+        start, _ = PERIOD_TIMING[period]
+        if now_str < start:
+            return period
+    return 15  # 已过所有课，返回15（超出范围）
 
 auto_week, auto_weekday = get_current_school_time()
 current_live_period = get_current_period_index()
@@ -112,7 +131,7 @@ with layout_left:
     available_buildings = []
     for campus in selected_campuses:
         available_buildings.extend(list(CAMPUS_DATA[campus].keys()))
-    selected_buildings = st.multiselect("🏢 选择教学楼", options=available_buildings, default=available_buildings[:2])
+    selected_buildings = st.multiselect("🏢 选择教学楼", options=available_buildings, default=["教三"])
     
     with st.expander("📅 教学周/星期微调"):
         week = st.number_input("教学周次", min_value=1, max_value=25, value=auto_week)
@@ -123,17 +142,17 @@ with layout_left:
 st.markdown("### ⏱️ 选择上课时间段")
 
 # 1. 确定"当前节次及以后"的范围
-# 注意：中午没有当前课节，此时current_live_period为None
-#   - 如果当前在午休（12:15-13:00），应该从下午第6节开始选
-#   - 否则从头开始选
+#   - 当前正好在某一节课中：从该节开始选
+#   - 当前在课间/午休等空档期：从下一节课开始选
+#   - 已过所有课：从第1节开始（全选所有）
 now_str = get_bj_now().strftime("%H:%M")
-if current_live_period is None:
-    if "12:15" <= now_str < "13:00":
-        start_from_period = 6
-    else:
-        start_from_period = 1
-else:
+if current_live_period is not None:
     start_from_period = current_live_period
+elif "12:15" <= now_str < "13:00":
+    start_from_period = 6  # 中午午休，从下午第6节开始
+else:
+    next_period = get_next_period_index()
+    start_from_period = next_period if next_period < 15 else 1
 all_future_periods = list(range(start_from_period, 15))
 
 # 2. 真正的"全选/取消全选"按钮交互（强行同步前端开关的 Value）
@@ -147,8 +166,9 @@ if st.button(btn_label):
             # 如果是全选，只把"当前及以后"的开关置为 True，过去的置为 False
             st.session_state[f"period_{p}"] = (p in all_future_periods)
         else:
-            # 如果是取消全选，恢复默认：只把当前这一节置为 True
-            st.session_state[f"period_{p}"] = (p == current_live_period if current_live_period else p in [1, 2])
+            # 如果是取消全选，恢复默认：当前正在上课→当前节；课间/午休/无课→当前节的后一节
+            default_period = current_live_period if current_live_period else (6 if "12:15" <= now_str < "13:00" else (get_next_period_index() if get_next_period_index() < 15 else 1))
+            st.session_state[f"period_{p}"] = (p == default_period)
             
     st.rerun() # 强制页面重新渲染，让开关视觉状态立刻刷新
 
@@ -161,6 +181,15 @@ is_mobile = "Mobi" in user_agent or "Android" in user_agent
 cols_count = 1 if is_mobile else 5
 grid_cols = st.columns(cols_count)
 
+# 计算默认选中的起始节次：当前正在上课→当前节；课间/午休/无课→当前节的后一节
+if current_live_period is not None:
+    default_start_period = current_live_period
+elif "12:15" <= now_str < "13:00":
+    default_start_period = 6  # 中午午休，从下午第6节开始
+else:
+    next_period = get_next_period_index()
+    default_start_period = next_period if next_period < 15 else 1
+
 for p in range(1, 15):
     start_t, end_t = PERIOD_TIMING[p]
     is_current = (p == current_live_period)
@@ -169,7 +198,7 @@ for p in range(1, 15):
 
     # 初始化兜底状态（仅在应用第一次打开、session_state 里还没这个开关时生效）
     if f"period_{p}" not in st.session_state:
-        st.session_state[f"period_{p}"] = (p == current_live_period if current_live_period else p in [1, 2])
+        st.session_state[f"period_{p}"] = (p == default_start_period)
 
     with grid_cols[(p-1) % cols_count]:
         # 注意：这里去掉了 value= 属性，改用完全由 key 绑定的 session_state 接管
