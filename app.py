@@ -14,9 +14,16 @@ if "all_selected" not in st.session_state:
 @st.cache_data
 def load_data():
     with open("school_timetable.json", "r", encoding="utf-8") as f:
-        return json.load(f)
+        course = json.load(f)
+    # 新增：尝试加载考表，如果不存在也不崩溃
+    try:
+        with open("exam_timetable.json", "r", encoding="utf-8") as f:
+            exams = json.load(f)
+    except FileNotFoundError:
+        exams = []
+    return course, exams
 
-timetable = load_data()
+timetable, exam_timetable = load_data()
 all_classrooms = sorted(list(set(item["classroom"] for item in timetable)))
 
 CAMPUS_DATA = {
@@ -97,6 +104,13 @@ current_live_period = get_current_period_index()
 # ================= 4. 过滤算法 =================
 def find_empty_rooms_multi_periods(target_week, target_weekday, selected_periods, selected_buildings):
     if not selected_periods: return []
+    # 新增：根据用户选的周次和星期，推算出真实的公历日期字符串
+    weeks_delta = target_week - ANCHOR_WEEK
+    # 锚点日期是星期五，所以要减去 5 找到那周的周一
+    target_date = ANCHOR_DATE - datetime.timedelta(days=4) + datetime.timedelta(weeks=weeks_delta, days=target_weekday-1)
+    target_date_str = target_date.strftime("%Y-%m-%d")
+    # 备用兼容格式（以防 CSV 里是 2026/06/22）
+    target_date_str_slash = target_date.strftime("%Y/%m/%d")
     busy_rooms = set()
     for item in timetable:
         if item["weekday"] == target_weekday and item["period"] in selected_periods:
@@ -109,7 +123,16 @@ def find_empty_rooms_multi_periods(target_week, target_weekday, selected_periods
                 else:
                     if part.isdigit() and int(part) == target_week: is_busy = True
             if is_busy: busy_rooms.add(item["classroom"])
-                    
+
+    # ---- 2. 新增：考表筛查 ----
+    for exam in exam_timetable:
+        # 如果日期对上了
+        if exam["date"] in [target_date_str, target_date_str_slash]:
+            # 检查考试节次和用户选的节次有没有重叠
+            has_overlap = any(p in selected_periods for p in exam["periods"])
+            if has_overlap:
+                busy_rooms.add(exam["classroom"]) # 考试占用了，拉黑！
+                                
     filtered_empty = []
     for room in all_classrooms:
         _, b_name = get_classroom_location(room)
