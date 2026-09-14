@@ -221,9 +221,25 @@ st.markdown("""
 
 .section-heading {
     margin: 0.35rem 0 0.55rem;
-    font-size: clamp(1.1rem, 4vw, 1.45rem);
+    font-size: clamp(1rem, 3.5vw, 1.25rem);
     font-weight: 650;
     line-height: 1.25;
+}
+
+.building-heading {
+    margin: 0.55rem 0 0.35rem;
+    font-size: clamp(1rem, 3.2vw, 1.2rem);
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+.query-summary {
+    margin: 0.25rem 0 0.45rem;
+    overflow: hidden;
+    font-size: 0.88rem;
+    line-height: 1.4;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 .period-help {
@@ -241,12 +257,12 @@ st.markdown("""
     font-weight: 400;
 }
 
-[data-testid="stAppViewContainer"] .main .block-container {
-    padding-top: 1rem;
-    padding-bottom: 2rem;
+[data-testid="stMainBlockContainer"].block-container {
+    padding-top: 0.75rem !important;
+    padding-bottom: 1.5rem !important;
 }
 
-[data-testid="stAppViewContainer"] .main hr {
+[data-testid="stMainBlockContainer"].block-container hr {
     margin: 0.8rem 0;
 }
 
@@ -288,8 +304,8 @@ st.markdown("""
 }
 
 @media (max-width: 640px) {
-    [data-testid="stAppViewContainer"] .main .block-container {
-        padding: 0.75rem 0.75rem 2rem;
+    [data-testid="stMainBlockContainer"].block-container {
+        padding: 0.5rem 0.75rem 1.5rem !important;
     }
 
     .room-chip {
@@ -300,6 +316,11 @@ st.markdown("""
     .top-meta {
         margin-bottom: 0.25rem;
         font-size: 0.74rem;
+    }
+
+    .query-summary {
+        margin: 0.2rem 0 0.35rem;
+        font-size: 0.78rem;
     }
 
     .period-help {
@@ -437,7 +458,6 @@ for row_start in range(1, 15, periods_per_row):
                 )
 
 # ================= 6. 结果渲染展示 =================
-st.markdown("---")
 st.markdown('<div class="section-heading">🟢 实时空闲教室面板</div>', unsafe_allow_html=True)
 
 if not selected_buildings:
@@ -471,7 +491,8 @@ else:
         return "、".join(parts)
 
     st.markdown(
-        f"📊 正在查询：**第 {week} 周** | **星期{['一','二','三','四','五','六','日'][weekday-1]}** | 选定节次：**{format_periods(sorted_periods)}**"
+        f'<div class="query-summary">📊 正在查询：第 {week} 周 | 星期{["一","二","三","四","五","六","日"][weekday-1]} | {format_periods(sorted_periods)}</div>',
+        unsafe_allow_html=True,
     )
     
     rooms_by_building = {b: [] for b in selected_buildings}
@@ -485,7 +506,7 @@ else:
     for i, b_name in enumerate(selected_buildings):
         with res_cols[i % result_col_count]:
             st.markdown(
-                f"#### 🏢 {escape(b_name)} <span class='room-count'>· {len(rooms_by_building[b_name])} 间空闲</span>",
+                f"<div class='building-heading'>🏢 {escape(b_name)} <span class='room-count'>· {len(rooms_by_building[b_name])} 间空闲</span></div>",
                 unsafe_allow_html=True,
             )
             rooms = rooms_by_building[b_name]
