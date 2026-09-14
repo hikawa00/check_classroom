@@ -231,6 +231,21 @@ st.markdown("""
     line-height: 1.2;
 }
 
+/* 用普通按钮做成可点亮的时间格子，允许完整标签自动换行 */
+[class*="st-key-period_tile_"] button {
+    min-height: 4.4rem;
+    padding: 0.5rem 0.35rem;
+    text-align: center;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+}
+
+[class*="st-key-period_tile_"] button p {
+    white-space: normal !important;
+    line-height: 1.25;
+}
+
 @media (max-width: 640px) {
     [data-testid="stAppViewContainer"] .main .block-container {
         padding: 0.75rem 0.75rem 2rem;
@@ -239,6 +254,11 @@ st.markdown("""
     .room-chip {
         padding: 0.32rem 0.45rem;
         font-size: 0.82rem;
+    }
+
+    [class*="st-key-period_tile_"] button {
+        min-height: 4.8rem;
+        font-size: 0.86rem;
     }
 }
 </style>
@@ -277,21 +297,34 @@ else:
     start_from_period = next_period if next_period < 15 else 1
 all_future_periods = list(range(start_from_period, 15))
 
-# 2. 真正的"全选/取消全选"按钮交互（强行同步前端开关的 Value）
+# 2. 计算默认选中的起始节次：当前正在上课→当前节；课间/午休/无课→当前节的后一节
+default_start_period = start_from_period
+
+if "selected_periods" not in st.session_state:
+    st.session_state.selected_periods = [default_start_period]
+
+
+def toggle_period(period):
+    """点击时间格子时切换选中状态。"""
+    selected = set(st.session_state.get("selected_periods", []))
+    if period in selected:
+        selected.remove(period)
+    else:
+        selected.add(period)
+    st.session_state.selected_periods = sorted(selected)
+    st.session_state.all_selected = False
+
+
+# 3. 全选/取消全选，仍然即时刷新页面
 btn_label = "❌ 取消全选" if st.session_state.all_selected else "📅 全选当前及后续节次"
 if st.button(btn_label, use_container_width=True):
     st.session_state.all_selected = not st.session_state.all_selected
-    
-    # 暴力同步：直接修改 Streamlit 内部管辖组件状态的 session_state
-    for p in range(1, 15):
-        if st.session_state.all_selected:
-            # 如果是全选，只把"当前及以后"的开关置为 True，过去的置为 False
-            st.session_state[f"period_{p}"] = (p in all_future_periods)
-        else:
-            # 如果是取消全选，恢复默认：当前正在上课→当前节；课间/午休/无课→当前节的后一节
-            default_period = current_live_period if current_live_period else (6 if "12:15" <= now_str < "13:00" else (get_next_period_index() if get_next_period_index() < 15 else 1))
-            st.session_state[f"period_{p}"] = (p == default_period)
-            
+
+    if st.session_state.all_selected:
+        st.session_state.selected_periods = all_future_periods.copy()
+    else:
+        st.session_state.selected_periods = [default_start_period]
+
     st.rerun() # 强制页面重新渲染，让开关视觉状态立刻刷新
 
 if is_mobile:
@@ -299,34 +332,33 @@ if is_mobile:
 else:
     st.write("点击下方方块选择一节或多节课（支持跨节多选）。带有 🔥 标识的为**当前实时进行中**的节次：")
 
-# 3. 渲染 14 个平铺开关（移动端列数动态调整，保证顺序正确）
-selected_periods = []
-cols_count = 2 if is_mobile else 5
-grid_cols = st.columns(cols_count)
+# 4. 渲染 14 个可点亮的时间格子（移动端两列，完整时间自动换行）
+selected_periods = sorted(
+    p for p in st.session_state.get("selected_periods", []) if 1 <= p <= 14
+)
+periods_per_row = 2 if is_mobile else 5
 
-# 计算默认选中的起始节次：当前正在上课→当前节；课间/午休/无课→当前节的后一节
-if current_live_period is not None:
-    default_start_period = current_live_period
-elif "12:15" <= now_str < "13:00":
-    default_start_period = 6  # 中午午休，从下午第6节开始
-else:
-    next_period = get_next_period_index()
-    default_start_period = next_period if next_period < 15 else 1
+# 每一行单独创建一组列。Streamlit 在窄屏上会按列折叠，
+# 如果一次性创建所有列，就会出现 01、03、05...、02、04... 的顺序。
+for row_start in range(1, 15, periods_per_row):
+    row_periods = list(range(row_start, min(row_start + periods_per_row, 15)))
+    row_cols = st.columns(len(row_periods))
 
-for p in range(1, 15):
-    start_t, end_t = PERIOD_TIMING[p]
-    is_current = (p == current_live_period)
-    label_prefix = "🔥 " if is_current else ""
-    button_text = f"{label_prefix}第 {p:02d} 节\n({start_t} ~ {end_t})"
+    for p, col in zip(row_periods, row_cols):
+        start_t, end_t = PERIOD_TIMING[p]
+        is_current = (p == current_live_period)
+        label_prefix = "🔥 " if is_current else ""
+        button_text = f"{label_prefix}第 {p:02d} 节  \n({start_t} ~ {end_t})"
 
-    # 初始化兜底状态（仅在应用第一次打开、session_state 里还没这个开关时生效）
-    if f"period_{p}" not in st.session_state:
-        st.session_state[f"period_{p}"] = (p == default_start_period)
-
-    with grid_cols[(p-1) % cols_count]:
-        # 注意：这里去掉了 value= 属性，改用完全由 key 绑定的 session_state 接管
-        if st.toggle(button_text, key=f"period_{p}"):
-            selected_periods.append(p)
+        with col:
+            st.button(
+                button_text,
+                key=f"period_tile_{p}",
+                on_click=toggle_period,
+                args=(p,),
+                type="primary" if p in selected_periods else "secondary",
+                use_container_width=True,
+            )
 
 # ================= 6. 结果渲染展示 =================
 st.markdown("---")
