@@ -58,8 +58,8 @@ def get_classroom_location(room_name):
     return "其他", "其他"
 
 # ================= 3. 完美北京时间计算 (最新标准) =================
-ANCHOR_DATE = datetime.date(2026, 5, 29)
-ANCHOR_WEEK = 13
+ANCHOR_DATE = datetime.date(2026, 9, 4)
+ANCHOR_WEEK = 1
 
 PERIOD_TIMING = {
     1:  ("08:00", "08:45"), 2:  ("08:50", "09:35"), 3:  ("09:50", "10:35"),
