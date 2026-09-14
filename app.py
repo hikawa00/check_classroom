@@ -141,7 +141,17 @@ def find_empty_rooms_multi_periods(target_week, target_weekday, selected_periods
     return filtered_empty
 
 # ================= 5. 前端 GUI 渲染 =================
-st.title("🏫 BUPT空教室查询系统")
+st.markdown("""
+<style>
+.app-title {
+    font-size: clamp(1.4rem, 5vw, 2rem);
+    font-weight: 700;
+    line-height: 1.2;
+    margin: 0.2rem 0 0.45rem;
+}
+</style>
+""", unsafe_allow_html=True)
+st.markdown('<div class="app-title">🏫 BUPT空教室查询系统</div>', unsafe_allow_html=True)
 now_time_display = get_bj_now().strftime("%Y-%m-%d %H:%M:%S")
 st.caption(f"🕒 北京时间：{now_time_display} | 推荐课表：第 {auto_week} 周 星期{['一','二','三','四','五','六','日'][auto_weekday-1]}")
 st.markdown("---")
