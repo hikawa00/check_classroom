@@ -153,7 +153,7 @@ def find_empty_rooms_multi_periods(target_week, target_weekday, selected_periods
 def render_filter_controls(date_in_expander=True, show_heading=True):
     """渲染校区、教学楼和教学周筛选控件。"""
     if show_heading:
-        st.subheader("⚙️ 基础筛选")
+        st.markdown('<div class="section-heading">⚙️ 基础筛选</div>', unsafe_allow_html=True)
 
     selected_campuses = st.multiselect(
         "📍 选择校区",
@@ -209,9 +209,35 @@ st.markdown("""
     margin: 0.2rem 0 0.45rem;
 }
 
+.section-heading {
+    margin: 0.35rem 0 0.55rem;
+    font-size: clamp(1.1rem, 4vw, 1.45rem);
+    font-weight: 650;
+    line-height: 1.25;
+}
+
+.period-help {
+    margin: 0.35rem 0 0.6rem;
+    color: inherit;
+    opacity: 0.78;
+    font-size: 0.92rem;
+    line-height: 1.45;
+}
+
+.room-count {
+    color: inherit;
+    opacity: 0.68;
+    font-size: 0.9em;
+    font-weight: 400;
+}
+
 [data-testid="stAppViewContainer"] .main .block-container {
     padding-top: 1rem;
     padding-bottom: 2rem;
+}
+
+[data-testid="stAppViewContainer"] .main hr {
+    margin: 0.8rem 0;
 }
 
 .room-grid {
@@ -232,9 +258,13 @@ st.markdown("""
 }
 
 /* 用普通按钮做成可点亮的时间格子，允许完整标签自动换行 */
+[class*="st-key-period_tile_"] {
+    margin-bottom: 0.35rem;
+}
+
 [class*="st-key-period_tile_"] button {
-    min-height: 4.4rem;
-    padding: 0.5rem 0.35rem;
+    min-height: 3.6rem;
+    padding: 0.35rem 0.25rem;
     text-align: center;
     white-space: normal !important;
     overflow-wrap: anywhere;
@@ -242,6 +272,7 @@ st.markdown("""
 }
 
 [class*="st-key-period_tile_"] button p {
+    margin: 0 !important;
     white-space: normal !important;
     line-height: 1.25;
 }
@@ -256,9 +287,29 @@ st.markdown("""
         font-size: 0.82rem;
     }
 
+    .period-help {
+        margin: 0.25rem 0 0.45rem;
+        font-size: 0.8rem;
+        line-height: 1.4;
+    }
+
     [class*="st-key-period_tile_"] button {
-        min-height: 4.8rem;
-        font-size: 0.86rem;
+        min-height: 3.35rem;
+        padding: 0.3rem 0.2rem;
+        font-size: 0.8rem;
+    }
+
+    /* Streamlit 在窄屏默认把 columns 的最小宽度设为整行，
+       这里仅对节次行解除该限制，并按自然顺序两列换行。 */
+    [class*="st-key-period_row_"] [data-testid="stHorizontalBlock"] {
+        flex-wrap: wrap !important;
+        gap: 0.45rem !important;
+    }
+
+    [class*="st-key-period_row_"] [data-testid="stColumn"] {
+        width: calc(50% - 0.225rem) !important;
+        min-width: 0 !important;
+        flex: 0 0 calc(50% - 0.225rem) !important;
     }
 }
 </style>
@@ -269,8 +320,8 @@ st.caption(f"🕒 北京时间：{now_time_display} | 推荐课表：第 {auto_w
 st.markdown("---")
 
 if is_mobile:
-    # 手机端将筛选控件放进一个全宽面板，避免被桌面端窄栏压缩
-    with st.expander("⚙️ 基础筛选", expanded=True):
+    # 手机端将筛选控件放进一个全宽面板，默认收起以便先看到节次选择。
+    with st.expander("⚙️ 基础筛选（点击展开）", expanded=False):
         selected_buildings, week, weekday = render_filter_controls(
             date_in_expander=False,
             show_heading=False,
@@ -281,7 +332,7 @@ else:
         selected_buildings, week, weekday = render_filter_controls()
 
 # ================= ⏱️ 核心时间面板区域 =================
-st.markdown("### ⏱️ 选择上课时间段")
+st.markdown('<div class="section-heading">⏱️ 选择上课时间段</div>', unsafe_allow_html=True)
 
 # 1. 确定"当前节次及以后"的范围
 #   - 当前正好在某一节课中：从该节开始选
@@ -328,37 +379,45 @@ if st.button(btn_label, use_container_width=True):
     st.rerun() # 强制页面重新渲染，让开关视觉状态立刻刷新
 
 if is_mobile:
-    st.write("点击下方方块选择一节或多节课；🔥 表示当前正在上课的节次。")
+    st.markdown(
+        '<p class="period-help">点击节次格子选择一节或多节课；🔥 表示当前正在上课的节次。</p>',
+        unsafe_allow_html=True,
+    )
 else:
-    st.write("点击下方方块选择一节或多节课（支持跨节多选）。带有 🔥 标识的为**当前实时进行中**的节次：")
+    st.markdown(
+        '<p class="period-help">点击下方方块选择一节或多节课（支持跨节多选）。带有 🔥 标识的为<strong>当前实时进行中</strong>的节次。</p>',
+        unsafe_allow_html=True,
+    )
 
 # 4. 渲染 14 个可点亮的时间格子（移动端两列，完整时间自动换行）
 selected_periods = sorted(
     p for p in st.session_state.get("selected_periods", []) if 1 <= p <= 14
 )
 periods_per_row = 2 if is_mobile else 5
+is_today_selection = week == auto_week and weekday == auto_weekday
 
 # 每一行单独创建一组列。Streamlit 在窄屏上会按列折叠，
 # 如果一次性创建所有列，就会出现 01、03、05...、02、04... 的顺序。
 for row_start in range(1, 15, periods_per_row):
     row_periods = list(range(row_start, min(row_start + periods_per_row, 15)))
-    row_cols = st.columns(len(row_periods))
+    with st.container(key=f"period_row_{row_start}"):
+        row_cols = st.columns(len(row_periods), gap="small")
 
-    for p, col in zip(row_periods, row_cols):
-        start_t, end_t = PERIOD_TIMING[p]
-        is_current = (p == current_live_period)
-        label_prefix = "🔥 " if is_current else ""
-        button_text = f"{label_prefix}第 {p:02d} 节  \n({start_t} ~ {end_t})"
+        for p, col in zip(row_periods, row_cols):
+            start_t, end_t = PERIOD_TIMING[p]
+            is_current = is_today_selection and p == current_live_period
+            label_prefix = "🔥 " if is_current else ""
+            button_text = f"{label_prefix}第 {p:02d} 节  \n({start_t} ~ {end_t})"
 
-        with col:
-            st.button(
-                button_text,
-                key=f"period_tile_{p}",
-                on_click=toggle_period,
-                args=(p,),
-                type="primary" if p in selected_periods else "secondary",
-                use_container_width=True,
-            )
+            with col:
+                st.button(
+                    button_text,
+                    key=f"period_tile_{p}",
+                    on_click=toggle_period,
+                    args=(p,),
+                    type="primary" if p in selected_periods else "secondary",
+                    use_container_width=True,
+                )
 
 # ================= 6. 结果渲染展示 =================
 st.markdown("---")
@@ -371,7 +430,32 @@ elif not selected_periods:
 else:
     result_rooms = find_empty_rooms_multi_periods(week, weekday, selected_periods, selected_buildings)
     sorted_periods = sorted(selected_periods)
-    st.markdown(f"📊 正在查询：**第 {week} 周** | **星期{['一','二','三','四','五','六','日'][weekday-1]}** | 选定节次: `第 {sorted_periods} 节`")
+
+    def format_periods(periods):
+        """把节次列表转换成适合手机阅读的连续区间文本。"""
+        if not periods:
+            return "未选择"
+        groups = []
+        start = previous = periods[0]
+        for period in periods[1:]:
+            if period == previous + 1:
+                previous = period
+                continue
+            groups.append((start, previous))
+            start = previous = period
+        groups.append((start, previous))
+
+        parts = []
+        for start, end in groups:
+            if start == end:
+                parts.append(f"第 {start} 节")
+            else:
+                parts.append(f"第 {start}–{end} 节")
+        return "、".join(parts)
+
+    st.markdown(
+        f"📊 正在查询：**第 {week} 周** | **星期{['一','二','三','四','五','六','日'][weekday-1]}** | 选定节次：**{format_periods(sorted_periods)}**"
+    )
     
     rooms_by_building = {b: [] for b in selected_buildings}
     for room in result_rooms:
@@ -383,7 +467,10 @@ else:
     res_cols = st.columns(result_col_count)
     for i, b_name in enumerate(selected_buildings):
         with res_cols[i % result_col_count]:
-            st.markdown(f"#### 🏢 {b_name} (`{len(rooms_by_building[b_name])}` 间空闲)")
+            st.markdown(
+                f"#### 🏢 {escape(b_name)} <span class='room-count'>· {len(rooms_by_building[b_name])} 间空闲</span>",
+                unsafe_allow_html=True,
+            )
             rooms = rooms_by_building[b_name]
             if rooms:
                 room_chips = "".join(
