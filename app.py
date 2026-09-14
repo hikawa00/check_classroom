@@ -209,6 +209,16 @@ st.markdown("""
     margin: 0.2rem 0 0.45rem;
 }
 
+.top-meta {
+    margin: 0.1rem 0 0.35rem;
+    overflow: hidden;
+    font-size: 0.82rem;
+    line-height: 1.3;
+    opacity: 0.72;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
 .section-heading {
     margin: 0.35rem 0 0.55rem;
     font-size: clamp(1.1rem, 4vw, 1.45rem);
@@ -287,6 +297,11 @@ st.markdown("""
         font-size: 0.82rem;
     }
 
+    .top-meta {
+        margin-bottom: 0.25rem;
+        font-size: 0.74rem;
+    }
+
     .period-help {
         margin: 0.25rem 0 0.45rem;
         font-size: 0.8rem;
@@ -294,30 +309,32 @@ st.markdown("""
     }
 
     [class*="st-key-period_tile_"] button {
-        min-height: 3.35rem;
-        padding: 0.3rem 0.2rem;
-        font-size: 0.8rem;
+        min-height: 3rem;
+        padding: 0.22rem 0.12rem;
+        font-size: 0.72rem;
     }
 
     /* Streamlit 在窄屏默认把 columns 的最小宽度设为整行，
-       这里仅对节次行解除该限制，并按自然顺序两列换行。 */
+       这里仅对节次行解除该限制，并按自然顺序四列换行。 */
     [class*="st-key-period_row_"] [data-testid="stHorizontalBlock"] {
         flex-wrap: wrap !important;
-        gap: 0.45rem !important;
+        gap: 0.35rem !important;
     }
 
     [class*="st-key-period_row_"] [data-testid="stColumn"] {
-        width: calc(50% - 0.225rem) !important;
+        width: calc(25% - 0.2625rem) !important;
         min-width: 0 !important;
-        flex: 0 0 calc(50% - 0.225rem) !important;
+        flex: 0 0 calc(25% - 0.2625rem) !important;
     }
 }
 </style>
 """, unsafe_allow_html=True)
 st.markdown('<div class="app-title">🏫 BUPT空教室查询系统</div>', unsafe_allow_html=True)
-now_time_display = get_bj_now().strftime("%Y-%m-%d %H:%M:%S")
-st.caption(f"🕒 北京时间：{now_time_display} | 推荐课表：第 {auto_week} 周 星期{['一','二','三','四','五','六','日'][auto_weekday-1]}")
-st.markdown("---")
+now_time_display = get_bj_now().strftime("%m-%d %H:%M")
+st.markdown(
+    f'<div class="top-meta">🕒 北京时间：{now_time_display} | 第 {auto_week} 周 星期{["一","二","三","四","五","六","日"][auto_weekday-1]}</div>',
+    unsafe_allow_html=True,
+)
 
 if is_mobile:
     # 手机端将筛选控件放进一个全宽面板，默认收起以便先看到节次选择。
@@ -389,11 +406,11 @@ else:
         unsafe_allow_html=True,
     )
 
-# 4. 渲染 14 个可点亮的时间格子（移动端两列，完整时间自动换行）
+# 4. 渲染 14 个可点亮的时间格子（移动端四列，完整时间自动换行）
 selected_periods = sorted(
     p for p in st.session_state.get("selected_periods", []) if 1 <= p <= 14
 )
-periods_per_row = 2 if is_mobile else 5
+periods_per_row = 4 if is_mobile else 5
 is_today_selection = week == auto_week and weekday == auto_weekday
 
 # 每一行单独创建一组列。Streamlit 在窄屏上会按列折叠，
@@ -407,7 +424,7 @@ for row_start in range(1, 15, periods_per_row):
             start_t, end_t = PERIOD_TIMING[p]
             is_current = is_today_selection and p == current_live_period
             label_prefix = "🔥 " if is_current else ""
-            button_text = f"{label_prefix}第 {p:02d} 节  \n({start_t} ~ {end_t})"
+            button_text = f"{label_prefix}第 {p:02d} 节  \n{start_t} ~ {end_t}"
 
             with col:
                 st.button(
@@ -421,7 +438,7 @@ for row_start in range(1, 15, periods_per_row):
 
 # ================= 6. 结果渲染展示 =================
 st.markdown("---")
-st.subheader("🟢 实时空闲教室面板")
+st.markdown('<div class="section-heading">🟢 实时空闲教室面板</div>', unsafe_allow_html=True)
 
 if not selected_buildings:
     st.warning("⚠️ 请在左侧选择至少一栋教学楼！")
