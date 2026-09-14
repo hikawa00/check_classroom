@@ -1,6 +1,7 @@
 import streamlit as st
 import json
 import datetime
+from html import escape
 
 # 页面配置
 st.set_page_config(page_title="BUPT空教室", page_icon="🏫", layout="wide")
@@ -25,6 +26,13 @@ def load_data():
 
 timetable, exam_timetable = load_data()
 all_classrooms = sorted(list(set(item["classroom"] for item in timetable)))
+
+# 设备判断只用于选择更合适的布局；字号和间距交给下面的响应式 CSS 控制
+user_agent = str(st.context.headers.get("User-Agent", "")).lower()
+is_mobile = any(
+    token in user_agent
+    for token in ("mobi", "android", "iphone", "ipad", "micromessenger")
+)
 
 CAMPUS_DATA = {
     "西土城本部": {
@@ -102,6 +110,7 @@ auto_week, auto_weekday = get_current_school_time()
 current_live_period = get_current_period_index()
 
 # ================= 4. 过滤算法 =================
+@st.cache_data(show_spinner=False)
 def find_empty_rooms_multi_periods(target_week, target_weekday, selected_periods, selected_buildings):
     if not selected_periods: return []
     # 新增：根据用户选的周次和星期，推算出真实的公历日期字符串
@@ -140,6 +149,56 @@ def find_empty_rooms_multi_periods(target_week, target_weekday, selected_periods
             filtered_empty.append(room)
     return filtered_empty
 
+
+def render_filter_controls(date_in_expander=True, show_heading=True):
+    """渲染校区、教学楼和教学周筛选控件。"""
+    if show_heading:
+        st.subheader("⚙️ 基础筛选")
+
+    selected_campuses = st.multiselect(
+        "📍 选择校区",
+        options=list(CAMPUS_DATA.keys()),
+        default=["西土城本部"],
+    )
+
+    available_buildings = []
+    for campus in selected_campuses:
+        available_buildings.extend(list(CAMPUS_DATA[campus].keys()))
+    available_buildings = list(dict.fromkeys(available_buildings))
+
+    default_buildings = []
+    if "教三" in available_buildings:
+        default_buildings = ["教三"]
+    elif available_buildings:
+        default_buildings = [available_buildings[0]]
+
+    selected_buildings = st.multiselect(
+        "🏢 选择教学楼",
+        options=available_buildings,
+        default=default_buildings,
+    )
+
+    if date_in_expander:
+        with st.expander("📅 教学周/星期微调"):
+            week = st.number_input("教学周次", min_value=1, max_value=25, value=auto_week)
+            weekday = st.selectbox(
+                "星期几",
+                options=[1, 2, 3, 4, 5, 6, 7],
+                index=auto_weekday - 1,
+                format_func=lambda x: f"星期{['一','二','三','四','五','六','日'][x-1]}",
+            )
+    else:
+        st.markdown("**📅 教学周/星期**")
+        week = st.number_input("教学周次", min_value=1, max_value=25, value=auto_week)
+        weekday = st.selectbox(
+            "星期几",
+            options=[1, 2, 3, 4, 5, 6, 7],
+            index=auto_weekday - 1,
+            format_func=lambda x: f"星期{['一','二','三','四','五','六','日'][x-1]}",
+        )
+
+    return selected_buildings, week, weekday
+
 # ================= 5. 前端 GUI 渲染 =================
 st.markdown("""
 <style>
@@ -149,6 +208,39 @@ st.markdown("""
     line-height: 1.2;
     margin: 0.2rem 0 0.45rem;
 }
+
+[data-testid="stAppViewContainer"] .main .block-container {
+    padding-top: 1rem;
+    padding-bottom: 2rem;
+}
+
+.room-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin: 0.3rem 0 0.8rem;
+}
+
+.room-chip {
+    display: inline-block;
+    padding: 0.35rem 0.55rem;
+    border: 1px solid rgba(46, 160, 67, 0.35);
+    border-radius: 0.55rem;
+    background: rgba(46, 160, 67, 0.1);
+    font-size: 0.9rem;
+    line-height: 1.2;
+}
+
+@media (max-width: 640px) {
+    [data-testid="stAppViewContainer"] .main .block-container {
+        padding: 0.75rem 0.75rem 2rem;
+    }
+
+    .room-chip {
+        padding: 0.32rem 0.45rem;
+        font-size: 0.82rem;
+    }
+}
 </style>
 """, unsafe_allow_html=True)
 st.markdown('<div class="app-title">🏫 BUPT空教室查询系统</div>', unsafe_allow_html=True)
@@ -156,20 +248,17 @@ now_time_display = get_bj_now().strftime("%Y-%m-%d %H:%M:%S")
 st.caption(f"🕒 北京时间：{now_time_display} | 推荐课表：第 {auto_week} 周 星期{['一','二','三','四','五','六','日'][auto_weekday-1]}")
 st.markdown("---")
 
-layout_left, layout_right = st.columns([1, 2])
-
-with layout_left:
-    st.subheader("⚙️ 基础筛选")
-    selected_campuses = st.multiselect("📍 选择校区", options=list(CAMPUS_DATA.keys()), default=["西土城本部"])
-    available_buildings = []
-    for campus in selected_campuses:
-        available_buildings.extend(list(CAMPUS_DATA[campus].keys()))
-    selected_buildings = st.multiselect("🏢 选择教学楼", options=available_buildings, default=["教三"])
-    
-    with st.expander("📅 教学周/星期微调"):
-        week = st.number_input("教学周次", min_value=1, max_value=25, value=auto_week)
-        weekday = st.selectbox("星期几", options=[1,2,3,4,5,6,7], index=auto_weekday-1,
-                               format_func=lambda x: f"星期{['一','二','三','四','五','六','日'][x-1]}")
+if is_mobile:
+    # 手机端将筛选控件放进一个全宽面板，避免被桌面端窄栏压缩
+    with st.expander("⚙️ 基础筛选", expanded=True):
+        selected_buildings, week, weekday = render_filter_controls(
+            date_in_expander=False,
+            show_heading=False,
+        )
+else:
+    layout_left, _layout_right = st.columns([1, 2])
+    with layout_left:
+        selected_buildings, week, weekday = render_filter_controls()
 
 # ================= ⏱️ 核心时间面板区域 =================
 st.markdown("### ⏱️ 选择上课时间段")
@@ -190,7 +279,7 @@ all_future_periods = list(range(start_from_period, 15))
 
 # 2. 真正的"全选/取消全选"按钮交互（强行同步前端开关的 Value）
 btn_label = "❌ 取消全选" if st.session_state.all_selected else "📅 全选当前及后续节次"
-if st.button(btn_label):
+if st.button(btn_label, use_container_width=True):
     st.session_state.all_selected = not st.session_state.all_selected
     
     # 暴力同步：直接修改 Streamlit 内部管辖组件状态的 session_state
@@ -205,13 +294,14 @@ if st.button(btn_label):
             
     st.rerun() # 强制页面重新渲染，让开关视觉状态立刻刷新
 
-st.write("点击下方方块选择一节或多节课（支持跨节多选）。带有 🔥 标识的为**当前实时进行中**的节次：")
+if is_mobile:
+    st.write("点击下方方块选择一节或多节课；🔥 表示当前正在上课的节次。")
+else:
+    st.write("点击下方方块选择一节或多节课（支持跨节多选）。带有 🔥 标识的为**当前实时进行中**的节次：")
 
 # 3. 渲染 14 个平铺开关（移动端列数动态调整，保证顺序正确）
 selected_periods = []
-user_agent = str(st.context.headers.get("User-Agent", ""))
-is_mobile = "Mobi" in user_agent or "Android" in user_agent
-cols_count = 1 if is_mobile else 5
+cols_count = 2 if is_mobile else 5
 grid_cols = st.columns(cols_count)
 
 # 计算默认选中的起始节次：当前正在上课→当前节；课间/午休/无课→当前节的后一节
@@ -257,12 +347,20 @@ else:
         if b_name in rooms_by_building:
             rooms_by_building[b_name].append(room)
             
-    res_cols = st.columns(len(selected_buildings) if len(selected_buildings) > 0 else 1)
+    result_col_count = 1 if is_mobile else min(len(selected_buildings), 3)
+    res_cols = st.columns(result_col_count)
     for i, b_name in enumerate(selected_buildings):
-        with res_cols[i]:
+        with res_cols[i % result_col_count]:
             st.markdown(f"#### 🏢 {b_name} (`{len(rooms_by_building[b_name])}` 间空闲)")
             rooms = rooms_by_building[b_name]
             if rooms:
-                for room in rooms: st.success(f"📍 {room}")
+                room_chips = "".join(
+                    f'<span class="room-chip">📍 {escape(room)}</span>'
+                    for room in rooms
+                )
+                st.markdown(
+                    f'<div class="room-grid">{room_chips}</div>',
+                    unsafe_allow_html=True,
+                )
             else:
                 st.caption("无空闲教室")
