@@ -246,8 +246,11 @@ st.markdown("""
     margin: 0.35rem 0 0.6rem;
     color: inherit;
     opacity: 0.78;
-    font-size: 0.92rem;
-    line-height: 1.45;
+    overflow: hidden;
+    font-size: 0.82rem;
+    line-height: 1.3;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 .room-count {
@@ -258,7 +261,8 @@ st.markdown("""
 }
 
 [data-testid="stMainBlockContainer"].block-container {
-    padding-top: 0.75rem !important;
+    /* Streamlit 顶部工具栏是绝对定位的，留出它的高度避免遮住页面标题。 */
+    padding-top: 3.75rem !important;
     padding-bottom: 1.5rem !important;
 }
 
@@ -305,7 +309,7 @@ st.markdown("""
 
 @media (max-width: 640px) {
     [data-testid="stMainBlockContainer"].block-container {
-        padding: 0.5rem 0.75rem 1.5rem !important;
+        padding: 3.75rem 0.75rem 1.5rem !important;
     }
 
     .room-chip {
@@ -325,8 +329,7 @@ st.markdown("""
 
     .period-help {
         margin: 0.25rem 0 0.45rem;
-        font-size: 0.8rem;
-        line-height: 1.4;
+        font-size: 0.7rem;
     }
 
     [class*="st-key-period_tile_"] button {
@@ -418,12 +421,12 @@ if st.button(btn_label, use_container_width=True):
 
 if is_mobile:
     st.markdown(
-        '<p class="period-help">点击节次格子选择一节或多节课；🔥 表示当前正在上课的节次。</p>',
+        '<p class="period-help">点击格子可多选；🔥 表示当前上课</p>',
         unsafe_allow_html=True,
     )
 else:
     st.markdown(
-        '<p class="period-help">点击下方方块选择一节或多节课（支持跨节多选）。带有 🔥 标识的为<strong>当前实时进行中</strong>的节次。</p>',
+        '<p class="period-help">点击格子可多选；🔥 表示当前上课</p>',
         unsafe_allow_html=True,
     )
 
